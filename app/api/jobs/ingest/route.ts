@@ -1087,11 +1087,11 @@ export async function POST(request: Request) {
     const globalMarkerWritten = !!globalLogStart?.ok
     const globalLogStartReadback = await verifyGlobalReadback(client, globalLogStart?.row?.run_at_utc || runAt)
 
+    const sourcesTableUsed = 'sc_sources'
     const { data: sources, error: sourceError } = await client
       .from('sc_sources')
-      .select('id,name,type,tier,url,rss_url,region,last_success_at,last_error_at')
+      .select('id,name,type,tier,url,rss_url,region,enabled,last_success_at,last_error_at')
       .eq('enabled', true)
-      .in('id', INGEST_SOURCE_ALLOWLIST_IDS)
       // PERF: process non-erroring sources first, then those with recent success.
       .order('last_error_at', { ascending: true, nullsFirst: true })
       .order('last_success_at', { ascending: false, nullsFirst: false })
@@ -1105,7 +1105,28 @@ export async function POST(request: Request) {
         errorMessage: 'no_enabled_sources',
       })
       const debugEnv = await buildDebugEnv(client)
-      return NextResponse.json({ ok: true, inserted_articles: 0, issue_updates_created: 0, sources_processed: 0, stopped_early: false, next_cursor: null, global_log_write_start: globalLogStart, global_log_write_start_readback: globalLogStartReadback, global_log_write_preflight: globalLogNoSources, debug_env: debugEnv })
+      return NextResponse.json({
+        ok: true,
+        inserted_articles: 0,
+        issue_updates_created: 0,
+        sources_processed: 0,
+        stopped_early: false,
+        next_cursor: null,
+        global_log_write_start: globalLogStart,
+        global_log_write_start_readback: globalLogStartReadback,
+        global_log_write_preflight: globalLogNoSources,
+        debug_env: debugEnv,
+        debug_return_metrics: debugReturnMetrics
+          ? {
+              run_at: runAt,
+              enabled_sources_count: 0,
+              enabled_source_ids: [],
+              sources_table_used: sourcesTableUsed,
+              supabase_host_hash: debugEnv?.supabase_host_hash || null,
+              service_role_hash_prefix: debugEnv?.service_role_hash_prefix || null,
+            }
+          : undefined,
+      })
     }
 
     let insertedArticles = 0
@@ -1574,6 +1595,9 @@ ${effectiveSummary}`.slice(0, 4000)
             inserted_runlog_source_ids: runlogInsertedSourceIds,
             global_marker_written: globalMarkerWritten,
             cursor_marker_written: cursorMarkerWritten,
+            enabled_sources_count: (sources || []).length,
+            enabled_source_ids: (sources || []).map((s: any) => Number(s.id)).slice(0, 10),
+            sources_table_used: sourcesTableUsed,
             supabase_host_hash: debugEnv?.supabase_host_hash || null,
             service_role_hash_prefix: debugEnv?.service_role_hash_prefix || null,
           }
