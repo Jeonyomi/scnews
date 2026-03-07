@@ -107,7 +107,7 @@ export async function GET(request: Request) {
 
     const { data: sources, error: sourceError } = await client
       .from('sc_sources')
-      .select('id,name,type,tier,region,enabled,last_success_at,last_error_at')
+      .select('id,name,type,tier,url,rss_url,region,enabled,last_success_at,last_error_at,created_at')
       .order('id', { ascending: true })
 
     if (sourceError) throw sourceError
@@ -159,6 +159,7 @@ export async function GET(request: Request) {
       ingest_active: activeSourceIds.has(Number(s.id)),
       enabled_effective: s.enabled === true || activeSourceIds.has(Number(s.id)),
     }))
+    const sourcesLenReturned = sourcesResolved.length
 
     const sourceWindowQueryParams = {
       filter: 'eq(source_id, <id>)',
@@ -501,6 +502,7 @@ export async function GET(request: Request) {
               service_role_hash_prefix: cfg.serviceRoleHashPrefix,
               tables_used: TABLES_USED,
               sources_count_fetched: sourcesCountFetched,
+              sources_len_returned: sourcesLenReturned,
               debug_allowed: debugAllowed,
               env_present: {
                 has_SUPABASE_URL: !!process.env.SUPABASE_URL,
