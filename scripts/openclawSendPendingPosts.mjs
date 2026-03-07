@@ -9,13 +9,16 @@ if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing SUPABASE_SERVICE_ROLE_K
 
 const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-const sanitizeText = (text) =>
-  String(text || '')
+const sanitizeText = (text) => {
+  const cleaned = String(text || '')
     .replace(/\uFFFD/g, '')
     .replace(/[\u0000-\u001F\u007F]/g, '')
     .replace(/\s+/g, ' ')
-    .replace(/^[^\[]+(?=\[)/u, '')
     .trim()
+
+  if (/^💥\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
+  return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
+}
 
 const wrapUrlsWithAngleBrackets = (text) =>
   String(text || '').replace(/(?<!<)(https?:\/\/[^\s>)]+)(?!>)/g, '<$1>')
@@ -26,7 +29,7 @@ async function main() {
     .select('id,created_at,target_channel,post_text')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
-    .limit(5)
+    .limit(2)
 
   if (error) {
     console.log(JSON.stringify({ ok: false, stage: 'fetch_pending', error }, null, 2))

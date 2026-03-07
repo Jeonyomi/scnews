@@ -836,7 +836,7 @@ const formatKbnPost = (payload: {
   const finalTitle = alreadyPrefixed ? clean : `${prefix} ${clean}`.trim()
 
   const link = normalizeFeedLink(String(payload.canonicalUrl || payload.fallbackUrl || '').trim())
-  const textRaw = `[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
+  const textRaw = `💥[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
   const text = sanitizePostText(textRaw)
 
   return { text, finalTitle, link }
@@ -879,7 +879,9 @@ const sanitizePostText = (text: string) => {
     .replace(/\s+/g, ' ')
     .trim()
 
-  // Remove leading junk before an ASCII prefix like [BREAKING]/[UPDATE].
+  if (/^💥\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
+
+  // Remove leading junk before the headline link prefix.
   return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
 }
 
