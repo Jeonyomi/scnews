@@ -92,6 +92,19 @@ export async function GET(request: Request) {
       channel_posts: 'sc_channel_posts',
     }
 
+    const serializeErr = (e: any) => {
+      if (!e) return null
+      try {
+        return JSON.stringify(e, Object.getOwnPropertyNames(e))
+      } catch {
+        try {
+          return JSON.stringify(e)
+        } catch {
+          return String(e)
+        }
+      }
+    }
+
     const { data: sources, error: sourceError } = await client
       .from('sc_sources')
       .select('id,name,type,tier,region,enabled,last_success_at,last_error_at')
@@ -101,6 +114,26 @@ export async function GET(request: Request) {
 
     const sourcesCountFetched = Array.isArray(sources) ? sources.length : 0
     const sourceLogsById: Record<number, any[]> = {}
+
+    let scSourcesCount: number | null = null
+    let scSourcesCountError: string | null = null
+    let scSourcesSample: any[] = []
+    let scSourcesSelectError: string | null = null
+
+    if (debugBasic) {
+      const countQ = await client
+        .from('sc_sources')
+        .select('id', { count: 'exact', head: true })
+      if (countQ.error) scSourcesCountError = serializeErr(countQ.error)
+      else scSourcesCount = Number(countQ.count || 0)
+
+      const sampleQ = await client
+        .from('sc_sources')
+        .select('id,name,enabled')
+        .limit(3)
+      if (sampleQ.error) scSourcesSelectError = serializeErr(sampleQ.error)
+      else scSourcesSample = sampleQ.data || []
+    }
 
     // Derive ingest-active sources over a short window (default 24h).
     const activeSince = new Date(Date.now() - ACTIVE_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
@@ -469,6 +502,15 @@ export async function GET(request: Request) {
               tables_used: TABLES_USED,
               sources_count_fetched: sourcesCountFetched,
               debug_allowed: debugAllowed,
+              env_present: {
+                has_SUPABASE_URL: !!process.env.SUPABASE_URL,
+                has_SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+                has_SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+              },
+              sc_sources_count: scSourcesCount,
+              sc_sources_count_error: scSourcesCountError,
+              sc_sources_sample: scSourcesSample,
+              sc_sources_select_error: scSourcesSelectError,
               ...(debugGlobal && debugAllowed
                 ? {
                     global_latest_query: globalLatestQuery,
