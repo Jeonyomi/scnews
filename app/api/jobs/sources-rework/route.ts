@@ -31,21 +31,21 @@ export async function POST(req: Request) {
 
     const db = createSupabaseServerClient()
 
-    const d1 = await db.from('sources').update({ enabled: false }).in('id', DISABLE_IDS)
+    const d1 = await db.from('sc_sources').update({ enabled: false }).in('id', DISABLE_IDS)
     if (d1.error) throw d1.error
 
-    const d2 = await db.from('sources').update({ enabled: true }).in('name', ENABLE_NAMES)
+    const d2 = await db.from('sc_sources').update({ enabled: true }).in('name', ENABLE_NAMES)
     if (d2.error) throw d2.error
 
     const q = await db
-      .from('sources')
+      .from('sc_sources')
       .select('id,name,enabled,type,tier,region')
       .or('id.in.(139,142,143,144),name.in.(CoinDesk,Cointelegraph,The Block,Tokenpost,Blockmedia,Binance Announcements,Upbit Announcements,Bithumb Announcements,Coinone Announcements)')
       .order('id', { ascending: true })
 
     if (q.error) throw q.error
 
-    const enabledCount = await db.from('sources').select('id', { count: 'exact', head: true }).eq('enabled', true)
+    const enabledCount = await db.from('sc_sources').select('id', { count: 'exact', head: true }).eq('enabled', true)
 
     return NextResponse.json({
       ok: true,

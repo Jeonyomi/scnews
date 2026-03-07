@@ -67,7 +67,7 @@ export async function GET(request: Request) {
       .limit(limit)
 
     const articleQ = await client
-      .from('articles')
+      .from('sc_articles')
       .select(
         'id,title,summary_short,region,importance_score,issue:issues!fk_articles_issue(id,title,topic_label,key_entities)',
       )

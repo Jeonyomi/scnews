@@ -28,7 +28,7 @@ async function main() {
   const db = getClient()
 
   const { data: allSources, error: allErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .select('id,name,enabled,type,tier,region,created_at')
     .order('id', { ascending: true })
 
@@ -74,7 +74,7 @@ async function main() {
   }
 
   const { error: enableErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .update({ enabled: true })
     .in('id', ALLOWLIST_IDS)
 
@@ -83,19 +83,19 @@ async function main() {
   if (toDelete.length > 0) {
     const deleteIds = toDelete.map((s) => Number(s.id))
     const { error: delErr } = await db
-      .from('sources')
+      .from('sc_sources')
       .delete()
       .in('id', deleteIds)
     if (delErr) throw delErr
   }
 
   const { count: remainCount, error: countErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .select('id', { count: 'exact', head: true })
   if (countErr) throw countErr
 
   const { data: remainRows, error: remainErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .select('id,name,enabled')
     .order('id', { ascending: true })
   if (remainErr) throw remainErr

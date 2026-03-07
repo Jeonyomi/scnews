@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
     const client = createAdminClient()
     let query = client
-      .from('channel_posts')
+      .from('sc_channel_posts')
       .select('id,created_at,status,lane,headline,headline_ko,source_name,article_url,tags,post_text,target_channel,target_admin,telegram_message_id,telegram_chat_id,reason')
 
     if (status) query = query.eq('status', status)
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     if (error) throw error
 
     if (debug) {
-      let countQuery = client.from('channel_posts').select('id', { count: 'exact', head: true })
+      let countQuery = client.from('sc_channel_posts').select('id', { count: 'exact', head: true })
       if (status) countQuery = countQuery.eq('status', status)
       const counted = await countQuery
       return NextResponse.json({ ok: true, data: data || [], meta: { status: status || 'all', count: counted.count || 0 } })
@@ -64,7 +64,7 @@ export async function PATCH(request: Request) {
     }
 
     const { data, error } = await client
-      .from('channel_posts')
+      .from('sc_channel_posts')
       .update(patch)
       .eq('id', id)
       .select('id,status,posted_at,approved_by,telegram_message_id,telegram_chat_id,reason')

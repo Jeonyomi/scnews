@@ -5,7 +5,7 @@ const supabase = createClient(process.env.SUPABASE_URL || process.env.NEXT_PUBLI
 
 const fix = (v) =>
   typeof v === 'string'
-    ? v.replace(/aï¿½?/g, "'").replace(/aï¿½\|/g, '...').replace(/ï¿½/g, '').trim()
+    ? v.replace(/aï¿?/g, "'").replace(/aï¿?|/g, '...').replace(/ï¿?g, '').trim()
     : v
 
 async function run() {
@@ -36,7 +36,7 @@ async function run() {
 
   let articlesFixed = 0
   const { data: articles, error: articleErr } = await supabase
-    .from('articles')
+    .from('sc_articles')
     .select('id,title,summary_short,why_it_matters')
     .limit(5000)
 
@@ -54,7 +54,7 @@ async function run() {
       next.summary_short !== row.summary_short ||
       next.why_it_matters !== row.why_it_matters
     ) {
-      const { error } = await supabase.from('articles').update(next).eq('id', row.id)
+      const { error } = await supabase.from('sc_articles').update(next).eq('id', row.id)
       if (error) throw error
       articlesFixed += 1
     }

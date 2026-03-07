@@ -37,9 +37,9 @@ const logGlobalRun = async (client, { runAtUtc, status, stage, errorMessage, ite
   }
 
   const withStage = { ...baseRow, stage }
-  const { error } = await client.from('ingest_logs').insert(withStage)
+  const { error } = await client.from('sc_ingest_logs').insert(withStage)
   if (!error) return
-  await client.from('ingest_logs').insert(baseRow)
+  await client.from('sc_ingest_logs').insert(baseRow)
 }
 
 async function fetchJson(url, options) {

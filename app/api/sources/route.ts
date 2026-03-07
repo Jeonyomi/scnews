@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     const debugAllowed = !!secret && headerSecret === secret
 
     const { data: sources, error: sourceError } = await client
-      .from('sources')
+      .from('sc_sources')
       .select('id,name,type,tier,region,enabled,last_success_at,last_error_at')
       .order('id', { ascending: true })
 
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
     // Derive ingest-active sources over a short window (default 24h).
     const activeSince = new Date(Date.now() - ACTIVE_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
     const activeRows = await client
-      .from('ingest_logs')
+      .from('sc_ingest_logs')
       .select('source_id')
       .gte('run_at_utc', activeSince)
       .not('source_id', 'is', null)
@@ -131,7 +131,7 @@ export async function GET(request: Request) {
       (sourcesResolved || []).map(async (source: any) => {
         const sourceId = Number(source.id)
         const withStage = await client
-          .from('ingest_logs')
+          .from('sc_ingest_logs')
           .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message,stage')
           .eq('source_id', sourceId)
           .order('run_at_utc', { ascending: false })
@@ -144,7 +144,7 @@ export async function GET(request: Request) {
         }
 
         const fallback = await client
-          .from('ingest_logs')
+          .from('sc_ingest_logs')
           .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message')
           .eq('source_id', sourceId)
           .order('run_at_utc', { ascending: false })
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
 
     let globalWindow: any[] = []
     const globalWithStage = await client
-      .from('ingest_logs')
+      .from('sc_ingest_logs')
       .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message,stage')
       .is('source_id', null)
       .order('run_at_utc', { ascending: false })
@@ -167,7 +167,7 @@ export async function GET(request: Request) {
       globalWindow = globalWithStage.data || []
     } else {
       const globalFallback = await client
-        .from('ingest_logs')
+        .from('sc_ingest_logs')
         .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message')
         .is('source_id', null)
         .order('run_at_utc', { ascending: false })
@@ -187,7 +187,7 @@ export async function GET(request: Request) {
 
     // Deterministic global latest selection (do not derive from pre-fetched window array).
     const latestGlobal = await client
-      .from('ingest_logs')
+      .from('sc_ingest_logs')
       .select('id,run_at_utc,status')
       .is('source_id', null)
       .order('run_at_utc', { ascending: false })
@@ -335,7 +335,7 @@ export async function GET(request: Request) {
     )
 
     const withStageRows = await client
-      .from('ingest_logs')
+      .from('sc_ingest_logs')
       .select('id,run_at_utc,stage,status,source_id')
       .is('source_id', null)
       .order('run_at_utc', { ascending: false })
@@ -345,7 +345,7 @@ export async function GET(request: Request) {
     const globalRowsLast5 = !withStageRows.error
       ? (withStageRows.data || [])
       : ((await client
-          .from('ingest_logs')
+          .from('sc_ingest_logs')
           .select('id,run_at_utc,status,source_id')
           .is('source_id', null)
           .order('run_at_utc', { ascending: false })
@@ -368,7 +368,7 @@ export async function GET(request: Request) {
 
     if (debugGlobal && debugAllowed) {
       const latestDirect = await client
-        .from('ingest_logs')
+        .from('sc_ingest_logs')
         .select('id,run_at_utc,status')
         .is('source_id', null)
         .order('run_at_utc', { ascending: false })
@@ -381,7 +381,7 @@ export async function GET(request: Request) {
       const since2hIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
 
       const globalCount2h = await client
-        .from('ingest_logs')
+        .from('sc_ingest_logs')
         .select('id', { head: true, count: 'exact' })
         .is('source_id', null)
         .gte('run_at_utc', since2hIso)
@@ -389,7 +389,7 @@ export async function GET(request: Request) {
       if (!globalCount2h.error) globalDirectCountLast2h = Number(globalCount2h.count || 0)
 
       const sourceCount2h = await client
-        .from('ingest_logs')
+        .from('sc_ingest_logs')
         .select('id', { head: true, count: 'exact' })
         .not('source_id', 'is', null)
         .gte('run_at_utc', since2hIso)
@@ -400,7 +400,7 @@ export async function GET(request: Request) {
         sourceDirectLatestById = await Promise.all(
           debugSourceIds.map(async (sourceId) => {
             const q = await client
-              .from('ingest_logs')
+              .from('sc_ingest_logs')
               .select('id,source_id,run_at_utc,status')
               .eq('source_id', sourceId)
               .order('run_at_utc', { ascending: false })

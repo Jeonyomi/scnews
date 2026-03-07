@@ -117,7 +117,7 @@ const INGEST_CURSOR_KEY = 'default'
 const getIngestCursorState = async (client: any): Promise<IngestCursorState> => {
   // Read from ingest_logs marker first: this path is known to be available in all envs.
   const marker = await client
-    .from('ingest_logs')
+    .from('sc_ingest_logs')
     .select('error_message,run_at_utc')
     .is('source_id', null)
     .like('error_message', 'cursor_state:%')
@@ -140,7 +140,7 @@ const getIngestCursorState = async (client: any): Promise<IngestCursorState> => 
   }
 
   const { data, error } = await client
-    .from('ingest_state')
+    .from('sc_ingest_state')
     .select('cursor_source_id,updated_at')
     .eq('state_key', INGEST_CURSOR_KEY)
     .maybeSingle()
@@ -165,7 +165,7 @@ const setIngestCursorState = async (client: any, nextCursorSourceId: number | nu
   }
 
   const { error } = await client
-    .from('ingest_state')
+    .from('sc_ingest_state')
     .upsert(payload, { onConflict: 'state_key' })
 
   if (error) {
@@ -177,7 +177,7 @@ const setIngestCursorState = async (client: any, nextCursorSourceId: number | nu
 
   // Always emit cursor marker to ingest_logs for portable, schema-agnostic replay.
   const markerPayload = `cursor_state:${JSON.stringify({ cursor_source_id: nextCursorSourceId })}`
-  const marker = await client.from('ingest_logs').insert({
+  const marker = await client.from('sc_ingest_logs').insert({
     source_id: null,
     run_at_utc: runAtUtc,
     status: 'ok',
@@ -389,7 +389,7 @@ const extractItemsFromNoticeHtml = (html: string, baseUrl: string, sourceName = 
     if (!href || !text || text.length < 8) continue
     if (/^javascript:/i.test(href)) continue
     const link = normalizeFeedLink(toAbs(href))
-    if (!/(notice|announcement|support|service_center|customer_support|info_notice|\/n\/[0-9]+|\b공지\b)/i.test(link)) continue
+    if (!/(notice|announcement|support|service_center|customer_support|info_notice|\/n\/[0-9]+|\b공�?\b)/i.test(link)) continue
     items.push({ title: text, link, summary: text, publishedAt: new Date().toISOString() })
     if (items.length >= 60) break
   }
@@ -760,13 +760,13 @@ const regionFromSource = (value: string | null) => {
 
 
 const insertChannelPostSafe = async (client: any, row: any) => {
-  const { error } = await client.from('channel_posts').insert({ ...row })
+  const { error } = await client.from('sc_channel_posts').insert({ ...row })
   if (!error) return
 
   if (String(error.message || '').includes('reason')) {
     const fallback = { ...row }
     delete fallback.reason
-    const { error: fallbackErr } = await client.from('channel_posts').insert(fallback)
+    const { error: fallbackErr } = await client.from('sc_channel_posts').insert(fallback)
     if (!fallbackErr) return
     throw fallbackErr
   }
@@ -821,13 +821,13 @@ const formatKbnPost = (payload: {
     String(payload.sourceName || ''),
   )
   const importance = String(payload.importanceLabel || '').toUpperCase()
-  const hasPrefix = clean.startsWith('[속보]')
+  const hasPrefix = clean.startsWith('[?�보]')
   const finalTitle = importance === 'HIGH'
-    ? (hasPrefix ? clean : `[속보] ${clean}`)
+    ? (hasPrefix ? clean : `[?�보] ${clean}`)
     : clean
 
   const link = normalizeFeedLink(String(payload.canonicalUrl || payload.fallbackUrl || '').trim())
-  const text = `💥[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
+  const text = `?��[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
 
   return { text, finalTitle, link }
 }
@@ -844,13 +844,13 @@ const isValidHttpUrl = (value: string) => {
 const hasBadKrNoticeTitle = (title: string) => {
   const raw = String(title || '').trim()
   const normalized = raw
-    .replace(/^\[속보\]\s*/i, '')
+    .replace(/^\[\uC18D\uBCF4\]\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim()
 
   if (!normalized || normalized.length < 8) return true
 
-  return /(업비트\s*-\s*업비트|빗썸\s*-\s*빗썸|코인원\s*-\s*코인원)/i.test(normalized)
+  return /(\uC5C5\uBE44\uD2B8\s*-\s*\uC5C5\uBE44\uD2B8|\uBE57\uC378\s*-\s*\uBE57\uC378|\uCF54\uC778\uC6D0\s*-\s*\uCF54\uC778\uC6D0)/i.test(normalized)
 }
 
 const autoPostBreaking = async (client: any, payload: {
@@ -898,7 +898,7 @@ const autoPostBreaking = async (client: any, payload: {
   }
 
   const { data: dup } = await client
-    .from('channel_posts')
+    .from('sc_channel_posts')
     .select('id')
     .eq('lane', 'breaking')
     .eq('status', 'posted')
@@ -947,7 +947,7 @@ const insertSourceRunLog = async (client: any, runLog: any) => {
     items_saved: runLog.items_saved || 0,
   }
 
-  const { error } = await client.from('ingest_logs').insert(row)
+  const { error } = await client.from('sc_ingest_logs').insert(row)
   if (error) {
     console.error('ingest_log_insert_failed', { source_id: row.source_id, error })
     return false
@@ -977,7 +977,7 @@ const buildDebugEnv = async (client: any) => {
 const verifyGlobalReadback = async (client: any, runAtUtc?: string | null) => {
   if (!runAtUtc) return { found: false, row: null }
   const q = await client
-    .from('ingest_logs')
+    .from('sc_ingest_logs')
     .select('id,run_at_utc,status,source_id')
     .is('source_id', null)
     .eq('run_at_utc', runAtUtc)
@@ -1009,10 +1009,10 @@ const writeGlobalIngestLog = async (client: any, payload: {
   }
 
   const withStage = { ...baseRow, stage: payload.stage }
-  const { error: stageErr } = await client.from('ingest_logs').insert(withStage)
+  const { error: stageErr } = await client.from('sc_ingest_logs').insert(withStage)
   if (!stageErr) return { ok: true, usedStage: true, row: withStage }
 
-  const { error: baseErr } = await client.from('ingest_logs').insert(baseRow)
+  const { error: baseErr } = await client.from('sc_ingest_logs').insert(baseRow)
   if (!baseErr) return { ok: true, usedStage: false, row: baseRow, stageError: stageErr }
 
   return {
@@ -1060,7 +1060,7 @@ export async function POST(request: Request) {
       }
 
       const latest = await client
-        .from('ingest_logs')
+        .from('sc_ingest_logs')
         .select('id,run_at_utc,status,source_id,error_message')
         .is('source_id', null)
         .order('run_at_utc', { ascending: false })
@@ -1088,7 +1088,7 @@ export async function POST(request: Request) {
     const globalLogStartReadback = await verifyGlobalReadback(client, globalLogStart?.row?.run_at_utc || runAt)
 
     const { data: sources, error: sourceError } = await client
-      .from('sources')
+      .from('sc_sources')
       .select('id,name,type,tier,url,rss_url,region,last_success_at,last_error_at')
       .eq('enabled', true)
       .in('id', INGEST_SOURCE_ALLOWLIST_IDS)
@@ -1236,7 +1236,7 @@ export async function POST(request: Request) {
         const urlDedupeSet = new Set<string>()
         if (canonicalUrls.length > 0) {
           const { data: existingUrls } = await client
-            .from('articles')
+            .from('sc_articles')
             .select('canonical_url')
             .eq('source_id', source.id)
             .in('canonical_url', canonicalUrls.slice(0, 80))
@@ -1249,7 +1249,7 @@ export async function POST(request: Request) {
         const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000 * 14).toISOString()
         const titleWindowSince = new Date(Date.now() - TITLE_DEDUPE_WINDOW_HOURS * 60 * 60 * 1000).toISOString()
         const { data: recentSourceRows } = await client
-          .from('articles')
+          .from('sc_articles')
           .select('title,published_at_utc')
           .eq('source_id', source.id)
           .gte('published_at_utc', titleWindowSince)
@@ -1323,7 +1323,7 @@ ${effectiveSummary}`.slice(0, 4000)
           // Dedupe window: only consider recent articles so old backfills don't block.
           const since = new Date(Date.now() - 24 * 60 * 60 * 1000 * 14).toISOString()
           const { data: dupesByHash } = await client
-            .from('articles')
+            .from('sc_articles')
             .select('id')
             .eq('source_id', source.id)
             .eq('content_hash', contentHash)
@@ -1336,7 +1336,7 @@ ${effectiveSummary}`.slice(0, 4000)
           }
 
           const { data: inserted, error: insertErr } = await client
-            .from('articles')
+            .from('sc_articles')
             .insert({
               title: effectiveTitle,
               source_id: source.id,
@@ -1488,7 +1488,7 @@ ${effectiveSummary}`.slice(0, 4000)
           }
 
           if (issueId) {
-            await client.from('articles').update({ issue_id: issueId }).eq('id', inserted.id)
+            await client.from('sc_articles').update({ issue_id: issueId }).eq('id', inserted.id)
 
             // Avoid spamming duplicate timeline entries: skip if an update already references this article.
             const { data: existingUpdate } = await client
@@ -1523,9 +1523,9 @@ ${effectiveSummary}`.slice(0, 4000)
       }
 
       if (runLog.status === 'ok') {
-        await client.from('sources').update({ last_success_at: runAt, last_error_at: null }).eq('id', source.id)
+        await client.from('sc_sources').update({ last_success_at: runAt, last_error_at: null }).eq('id', source.id)
       } else {
-        await client.from('sources').update({ last_error_at: runAt }).eq('id', source.id)
+        await client.from('sc_sources').update({ last_error_at: runAt }).eq('id', source.id)
       }
 
       completedSourceIds.push(Number(source.id))

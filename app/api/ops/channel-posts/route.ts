@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     const client = createAdminClient()
     const baseQuery = (selectText: string) =>
       client
-        .from('channel_posts')
+        .from('sc_channel_posts')
         .select(selectText)
         .eq('target_channel', channel)
         .gte('created_at', since)

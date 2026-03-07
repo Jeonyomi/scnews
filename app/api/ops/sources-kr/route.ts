@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
     const client = createAdminClient()
     const { data: sources, error: srcErr } = await client
-      .from('sources')
+      .from('sc_sources')
       .select('id,name,enabled,type,tier,region')
       .in('name', KR_EXCHANGE_NAMES)
       .order('id', { ascending: true })
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const ids = (sources || []).map((s: any) => s.id)
 
     const { data: logs, error: logsErr } = await client
-      .from('ingest_logs')
+      .from('sc_ingest_logs')
       .select('id,source_id,run_at_utc,status,items_fetched,items_saved,error_message')
       .in('source_id', ids)
       .gte('run_at_utc', since)
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     if (logsErr) throw logsErr
 
     const { data: articles, error: artErr } = await client
-      .from('articles')
+      .from('sc_articles')
       .select('id,source_id,title,url,published_at_utc')
       .in('source_id', ids)
       .gte('published_at_utc', since)

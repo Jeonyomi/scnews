@@ -51,14 +51,14 @@ const krNoticeSources = [
 
 const run = async () => {
   const { error: enableErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .update({ enabled: true })
     .in('name', ensureEnabledNames)
 
   if (enableErr) throw enableErr
 
   const { error: upsertErr } = await db
-    .from('sources')
+    .from('sc_sources')
     .upsert(krNoticeSources, { onConflict: 'name' })
 
   if (upsertErr) throw upsertErr

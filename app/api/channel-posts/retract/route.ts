@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const client = createAdminClient()
     const { data: row, error } = await client
-      .from('channel_posts')
+      .from('sc_channel_posts')
       .select('id,status,telegram_message_id,telegram_chat_id,target_channel')
       .eq('id', id)
       .single()
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     const { data: updated, error: updateErr } = await client
-      .from('channel_posts')
+      .from('sc_channel_posts')
       .update({
         status: 'skipped',
         updated_at: new Date().toISOString(),

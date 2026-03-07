@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
     const client = createPublicClient()
     let query = client
-      .from('articles')
+      .from('sc_articles')
       .select(
         `
           id,title,url,canonical_url,published_at_utc,created_at,fetched_at_utc,language,region,
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
     )
 
     if (missingSourceIds.length > 0) {
-      const { data: sourceRows } = await client.from('sources').select('id,name,tier').in('id', missingSourceIds)
+      const { data: sourceRows } = await client.from('sc_sources').select('id,name,tier').in('id', missingSourceIds)
       const sourceMap = new Map<number, any>((sourceRows || []).map((s: any) => [Number(s.id), s]))
       for (const item of articles as any[]) {
         if (String(item?.source?.name || '').trim()) continue

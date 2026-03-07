@@ -119,7 +119,7 @@ async function main() {
     ...s,
   }))
 
-  const { error } = await supabase.from('sources').upsert(normalized, { onConflict: 'name' })
+  const { error } = await supabase.from('sc_sources').upsert(normalized, { onConflict: 'name' })
 
   if (error) {
     console.error('seed_sources_error:', error)
