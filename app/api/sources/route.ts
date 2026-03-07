@@ -84,6 +84,13 @@ export async function GET(request: Request) {
     const headerSecret = request.headers.get('x-cron-secret') || ''
     const debugAllowed = !!secret && headerSecret === secret
 
+    const TABLES_USED = {
+      sources: 'sc_sources',
+      articles: 'sc_articles',
+      ingest_logs: 'sc_ingest_logs',
+      channel_posts: 'sc_channel_posts',
+    }
+
     const { data: sources, error: sourceError } = await client
       .from('sc_sources')
       .select('id,name,type,tier,region,enabled,last_success_at,last_error_at')
@@ -91,6 +98,7 @@ export async function GET(request: Request) {
 
     if (sourceError) throw sourceError
 
+    const sourcesCountFetched = Array.isArray(sources) ? sources.length : 0
     const sourceLogsById: Record<number, any[]> = {}
 
     // Derive ingest-active sources over a short window (default 24h).
@@ -448,6 +456,8 @@ export async function GET(request: Request) {
           global_latest_age_minutes: globalLatestAgeMinutes,
           global_is_stale: globalIsStale,
           last_run_distribution: lastRunDistribution,
+          sources_count_fetched: sourcesCountFetched,
+          tables_used: TABLES_USED,
         },
         debug: debugGlobal && debugAllowed
           ? {
@@ -512,9 +522,37 @@ export async function GET(request: Request) {
           : undefined,
       }),
     )
-  } catch (error) {
+  } catch (error: any) {
     console.error('GET /api/sources failed', error)
-    return NextResponse.json(err(`sources_error: ${String(error)}`), { status: 500 })
+
+    const supabaseError = {
+      message: error?.message ?? null,
+      details: error?.details ?? null,
+      hint: error?.hint ?? null,
+      code: error?.code ?? null,
+    }
+
+    const serializedError = (() => {
+      if (typeof error === 'string') return error
+      try {
+        return JSON.stringify(error, Object.getOwnPropertyNames(error))
+      } catch {
+        try {
+          return JSON.stringify(error)
+        } catch {
+          return String(error)
+        }
+      }
+    })()
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `sources_error: ${serializedError}`,
+        supabase_error: supabaseError,
+      },
+      { status: 500 },
+    )
   }
 }
 
