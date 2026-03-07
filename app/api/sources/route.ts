@@ -169,32 +169,23 @@ export async function GET(request: Request) {
       mode: 'direct_latest_hotfix',
     }
 
-    // Hotfix: use direct-latest row per source for health freshness.
+    // Deterministic per-source latest selection.
+    // Note: In some environments, selecting extra columns can lead to empty results due to schema cache drift.
+    // Keep this select minimal and use maybeSingle() for stable semantics.
     await Promise.all(
       (sourcesResolved || []).map(async (source: any) => {
         const sourceId = Number(source.id)
-        const withStage = await client
-          .from('sc_ingest_logs')
-          .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message,stage')
-          .eq('source_id', sourceId)
-          .order('run_at_utc', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(1)
 
-        if (!withStage.error) {
-          sourceLogsById[sourceId] = withStage.data || []
-          return
-        }
-
-        const fallback = await client
+        const latest = await client
           .from('sc_ingest_logs')
           .select('id,source_id,status,run_at_utc,items_fetched,items_saved,error_message')
           .eq('source_id', sourceId)
           .order('run_at_utc', { ascending: false })
           .order('id', { ascending: false })
           .limit(1)
+          .maybeSingle()
 
-        sourceLogsById[sourceId] = fallback.data || []
+        sourceLogsById[sourceId] = latest.data ? [latest.data] : []
       }),
     )
 
