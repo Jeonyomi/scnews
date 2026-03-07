@@ -44,8 +44,7 @@ export async function GET(request: Request) {
           id,title,url,canonical_url,published_at_utc,created_at,fetched_at_utc,language,region,
           summary_short,why_it_matters,confidence_label,importance_score,importance_label,status,issue_id,
           source_id, content_hash,
-          source:sc_sources(id,name,tier),
-          issue:issues!fk_articles_issue(id,title,topic_label,importance_label)
+          source:sc_sources(id,name,tier)
         `,
         { count: 'exact' },
       )
@@ -58,9 +57,7 @@ export async function GET(request: Request) {
         : query.gte('published_at_utc', since)
     }
     if (region !== 'All') query = query.eq('region', region)
-    if (topic !== 'all') {
-      query = query.eq('issue.topic_label', topic)
-    }
+    // scnews MVP has no issues table join; keep topic param accepted but ignore for now.
 
     if (search) {
       query = query.ilike('title', `%${search}%`)
@@ -101,13 +98,6 @@ export async function GET(request: Request) {
               name: normalizeEnglish(String((item.source as any).name || '')),
             }
           : null,
-      issue:
-        item.issue && typeof item.issue === 'object' && !Array.isArray(item.issue)
-          ? {
-              ...(item.issue as Record<string, unknown>),
-              title: normalizeEnglish(String((item.issue as any).title || '')),
-            }
-          : undefined,
     }))
 
     const missingSourceIds = Array.from(
