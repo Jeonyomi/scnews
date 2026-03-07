@@ -285,15 +285,24 @@ const normalizeDate = (value?: string) => {
 
 const extractLinkFromEntry = (entry: string) => {
   const cdataStripped = entry.replace(/<!\[CDATA\[|\]\]>/g, '')
-  // Atom feeds frequently use href with either single/double quotes and arbitrary
-  // attribute order. Support both forms before falling back to <link>text</link>.
+  // Atom: prefer rel="alternate" href first, then any href.
+  const relAltHref =
+    cdataStripped.match(/<link[^>]*rel\s*=\s*"alternate"[^>]*href\s*=\s*"([^"]+)"[^>]*>/i) ||
+    cdataStripped.match(/<link[^>]*rel\s*=\s*'alternate'[^>]*href\s*=\s*'([^']+)'[^>]*>/i) ||
+    cdataStripped.match(/<link[^>]*href\s*=\s*"([^"]+)"[^>]*rel\s*=\s*"alternate"[^>]*>/i) ||
+    cdataStripped.match(/<link[^>]*href\s*=\s*'([^']+)'[^>]*rel\s*=\s*'alternate'[^>]*>/i)
+  if (relAltHref) return decodeHtml(relAltHref[1]).trim()
+
   const hrefMatch =
     cdataStripped.match(/<link[^>]*\shref\s*=\s*"([^"]+)"[^>]*>/i) ||
     cdataStripped.match(/<link[^>]*\shref\s*=\s*'([^']+)'[^>]*>/i)
   if (hrefMatch) return decodeHtml(hrefMatch[1]).trim()
 
-  const linkMatch = cdataStripped.match(/<link>([\s\S]*?)<\/link>/i)
-  return linkMatch ? linkMatch[1].trim() : ''
+  const linkMatch = cdataStripped.match(/<link[^>]*>([\s\S]*?)<\/link>/i)
+  if (linkMatch?.[1]) return decodeHtml(linkMatch[1]).trim()
+
+  const guidMatch = cdataStripped.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i)
+  return guidMatch?.[1] ? decodeHtml(guidMatch[1]).trim() : ''
 }
 
 const stripHtmlTags = (value: string) =>
@@ -402,20 +411,24 @@ const extractItemsFromNoticeHtml = (html: string, baseUrl: string, sourceName = 
   return Array.from(uniq.values())
 }
 const extractItemsFromRss = (xml: string, sourceName = "") => {
-  const items = xml.match(/<item>[\s\S]*?<\/item>/gi) || []
-  const entries = xml.match(/<entry>[\s\S]*?<\/entry>/gi) || []
+  const items = xml.match(/<item\b[^>]*>[\s\S]*?<\/item>/gi) || []
+  const entries = xml.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/gi) || []
 
   const parseEntry = (entry: string, isAtom = false) => {
-    const titleMatch = entry.match(/<title>([\s\S]*?)<\/title>/i)
+    const titleMatch = entry.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
     const linkText = isAtom ? extractLinkFromEntry(entry) : ''
     const linkMatch = isAtom
       ? null
-      : entry.match(/<link>([\s\S]*?)<\/link>/i)
-    const summaryMatch = entry.match(/<summary>([\s\S]*?)<\/summary>/i)
+      : (
+          entry.match(/<link[^>]*>([\s\S]*?)<\/link>/i) ||
+          entry.match(/<link[^>]*href\s*=\s*"([^"]+)"[^>]*\/?>(?:<\/link>)?/i) ||
+          entry.match(/<link[^>]*href\s*=\s*'([^']+)'[^>]*\/?>(?:<\/link>)?/i)
+        )
+    const summaryMatch = entry.match(/<summary[^>]*>([\s\S]*?)<\/summary>/i)
     const contentMatch = entry.match(/<content[^>]*>([\s\S]*?)<\/content>/i)
     const dateMatch =
-      entry.match(/<published>([\s\S]*?)<\/published>/i) ||
-      entry.match(/<updated>([\s\S]*?)<\/updated>/i)
+      entry.match(/<published[^>]*>([\s\S]*?)<\/published>/i) ||
+      entry.match(/<updated[^>]*>([\s\S]*?)<\/updated>/i)
 
     const isHn = String(sourceName || '').toLowerCase().includes('hacker news')
     const title = titleMatch
@@ -435,10 +448,19 @@ const extractItemsFromRss = (xml: string, sourceName = "") => {
 
   return items
     .map((item) => {
-      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/i)
-      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/i)
-      const descMatch = item.match(/<description>([\s\S]*?)<\/description>/i)
-      const pubMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)
+      const titleMatch = item.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+      const linkMatch =
+        item.match(/<link[^>]*>([\s\S]*?)<\/link>/i) ||
+        item.match(/<link[^>]*href\s*=\s*"([^"]+)"[^>]*\/?>(?:<\/link>)?/i) ||
+        item.match(/<link[^>]*href\s*=\s*'([^']+)'[^>]*\/?>(?:<\/link>)?/i) ||
+        item.match(/<guid[^>]*isPermaLink\s*=\s*"true"[^>]*>([\s\S]*?)<\/guid>/i) ||
+        item.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i)
+      const descMatch =
+        item.match(/<description[^>]*>([\s\S]*?)<\/description>/i) ||
+        item.match(/<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i)
+      const pubMatch =
+        item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i) ||
+        item.match(/<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i)
 
       const isHn = String(sourceName || '').toLowerCase().includes('hacker news')
       const title = titleMatch
@@ -530,7 +552,10 @@ const fetchWithRetry = async (url: string, tries = FETCH_TRIES, timeoutMs = FETC
     }
   }
 
-  throw new Error(`rss_fetch_status_network_${String(lastError)}`)
+  const errObj: any = lastError as any
+  const netMsg = errObj?.message || String(lastError)
+  const netCode = errObj?.code ? `_${String(errObj.code)}` : ''
+  throw new Error(`rss_fetch_status_network${netCode}_${netMsg}`)
 }
 
 const deriveTopic = (title: string, summary: string) => {
@@ -1133,6 +1158,7 @@ export async function POST(request: Request) {
     let issueUpdatesCreated = 0
     let sourcesProcessed = 0
     let stoppedEarly = false
+    const parserSamples: Array<{ source_id: number; source_name: string; sample: Array<{ title: string; link: string }> }> = []
 
     const autopostEval = {
       candidates: 0,
@@ -1221,6 +1247,13 @@ export async function POST(request: Request) {
           }
         }
         runLog.items_fetched = parsed.length
+        if (parsed.length > 0 && parserSamples.length < 6) {
+          parserSamples.push({
+            source_id: Number(source.id),
+            source_name: String(source.name || ''),
+            sample: parsed.slice(0, 2).map((p) => ({ title: String(p.title || '').slice(0, 160), link: String(p.link || '') })),
+          })
+        }
         runLog.items_skipped_url = 0
         runLog.items_skipped_hash = 0
         runLog.items_insert_errors = 0
@@ -1598,6 +1631,7 @@ ${effectiveSummary}`.slice(0, 4000)
             enabled_sources_count: (sources || []).length,
             enabled_source_ids: (sources || []).map((s: any) => Number(s.id)).slice(0, 10),
             sources_table_used: sourcesTableUsed,
+            parser_samples: parserSamples,
             supabase_host_hash: debugEnv?.supabase_host_hash || null,
             service_role_hash_prefix: debugEnv?.service_role_hash_prefix || null,
           }
