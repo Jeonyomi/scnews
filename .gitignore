@@ -1,0 +1,51 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# testing
+coverage
+
+# next.js
+.next/
+out/
+build
+dist
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local env files / secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+.vercel.env.*
+.tmp_cron_secret
+
+# turbo
+.turbo
+
+# vercel
+.vercel
+
+# prisma local sqlite
+prisma/*.db
+
+# local tmp
+/tmp
+build.log
+*tsbuildinfo
+scripts/temp_*
+scripts/_*
+scripts/trigger_ingest*.ps1
+temp_*
