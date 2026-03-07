@@ -44,7 +44,7 @@ export async function GET(request: Request) {
           id,title,url,canonical_url,published_at_utc,created_at,fetched_at_utc,language,region,
           summary_short,why_it_matters,confidence_label,importance_score,importance_label,status,issue_id,
           source_id, content_hash,
-          source:sources(id,name,tier),
+          source:sc_sources(id,name,tier),
           issue:issues!fk_articles_issue(id,title,topic_label,importance_label)
         `,
         { count: 'exact' },
