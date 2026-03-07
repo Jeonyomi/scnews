@@ -70,6 +70,7 @@ export async function GET(request: Request) {
     const client = createSupabaseServerClient()
     const url = new URL(request.url)
     const debugGlobal = url.searchParams.get('debug_global') === '1'
+    const debugBasic = url.searchParams.get('debug') === '1' || debugGlobal
     const debugSourceIds = String(url.searchParams.get('debug_source_ids') || '')
       .split(',')
       .map((v) => Number(v.trim()))
@@ -459,65 +460,72 @@ export async function GET(request: Request) {
           sources_count_fetched: sourcesCountFetched,
           tables_used: TABLES_USED,
         },
-        debug: debugGlobal && debugAllowed
+        debug: debugBasic
           ? {
               vercel_env: process.env.VERCEL_ENV || null,
               commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
-              global_latest_query: globalLatestQuery,
-              global_latest_raw_row: debugGlobalLatestRawRow,
-              global_latest_selected: debugGlobalLatestRawRow,
-              global_latest_selected_row: debugGlobalLatestRawRow,
               supabase_host_hash: cfg.supabaseHostHash,
               service_role_hash_prefix: cfg.serviceRoleHashPrefix,
-              enabled_true_count: (sourcesResolved || []).filter((s: any) => s.enabled === true).length,
-              enabled_effective_true_count: (sourcesResolved || []).filter((s: any) => s.enabled_effective === true).length,
-              tracked_enabled_flags: (sourcesResolved || [])
-                .filter((s: any) => [139, 142, 143, 144].includes(Number(s.id)))
-                .map((s: any) => ({ id: s.id, name: s.name, enabled: s.enabled })),
-              sample_source_latest_selected: (health || []).slice(0, 2).map((h: any) => ({
-                source_id: h.source_id,
-                source_name: h.source_name,
-                last_run_at: h.last_run_at,
-                last_status: h.last_status,
-              })),
-              db_now: dbNow.value || null,
-              db_now_error: dbNow.ok ? null : (dbNow.error || 'db_now_unavailable'),
-              server_now_utc: dbNow.value || null,
-              server_now_client: serverNowClient,
-              global_direct_latest_query_row: globalDirectLatestRow,
-              global_direct_latest_row: globalDirectLatestRow,
-              global_direct_count_last_2h: globalDirectCountLast2h,
-              source_direct_count_last_2h: sourceDirectCountLast2h,
-              source_direct_latest_by_id: sourceDirectLatestById,
-              source_window_query_params: sourceWindowQueryParams,
-              source_window_first_row_by_id: (debugSourceIds.length > 0 ? debugSourceIds : (health || []).slice(0, 3).map((h: any) => Number(h.source_id))).slice(0, 3).map((sid: number) => {
-                const rows = sourceLogsById[Number(sid)] || []
-                const first = rows[0] || null
-                return {
-                  source_id: Number(sid),
-                  window_first_row: first ? {
-                    id: Number(first.id || 0) || null,
-                    run_at_utc: first.run_at_utc || null,
-                    status: first.status || null,
-                  } : null,
-                  window_rows_count: rows.length,
-                }
-              }),
-              distribution_sample: (debugSourceIds.length > 0 ? debugSourceIds : (health || []).slice(0, 3).map((h: any) => Number(h.source_id))).slice(0, 3).map((sid: number) => {
-                const h = (health || []).find((row: any) => Number(row.source_id) === Number(sid))
-                const d = sourceDirectLatestById.find((row) => Number(row.source_id) === Number(sid))
-                const w = (sourceLogsById[Number(sid)] || [])[0]
-                const latestUsed = h?.last_run_at || null
-                return {
-                  source_id: sid,
-                  latest_run_at_used_for_bucket: latestUsed,
-                  latest_run_at_direct: d?.run_at_utc || null,
-                  latest_run_at_window_first: w?.run_at_utc || null,
-                  bucket: bucketFromLatestRunAt(latestUsed),
-                }
-              }),
-              parity_ok: parityOk,
-              global_rows_last5: globalRowsLast5,
+              tables_used: TABLES_USED,
+              sources_count_fetched: sourcesCountFetched,
+              debug_allowed: debugAllowed,
+              ...(debugGlobal && debugAllowed
+                ? {
+                    global_latest_query: globalLatestQuery,
+                    global_latest_raw_row: debugGlobalLatestRawRow,
+                    global_latest_selected: debugGlobalLatestRawRow,
+                    global_latest_selected_row: debugGlobalLatestRawRow,
+                    enabled_true_count: (sourcesResolved || []).filter((s: any) => s.enabled === true).length,
+                    enabled_effective_true_count: (sourcesResolved || []).filter((s: any) => s.enabled_effective === true).length,
+                    tracked_enabled_flags: (sourcesResolved || [])
+                      .filter((s: any) => [139, 142, 143, 144].includes(Number(s.id)))
+                      .map((s: any) => ({ id: s.id, name: s.name, enabled: s.enabled })),
+                    sample_source_latest_selected: (health || []).slice(0, 2).map((h: any) => ({
+                      source_id: h.source_id,
+                      source_name: h.source_name,
+                      last_run_at: h.last_run_at,
+                      last_status: h.last_status,
+                    })),
+                    db_now: dbNow.value || null,
+                    db_now_error: dbNow.ok ? null : (dbNow.error || 'db_now_unavailable'),
+                    server_now_utc: dbNow.value || null,
+                    server_now_client: serverNowClient,
+                    global_direct_latest_query_row: globalDirectLatestRow,
+                    global_direct_latest_row: globalDirectLatestRow,
+                    global_direct_count_last_2h: globalDirectCountLast2h,
+                    source_direct_count_last_2h: sourceDirectCountLast2h,
+                    source_direct_latest_by_id: sourceDirectLatestById,
+                    source_window_query_params: sourceWindowQueryParams,
+                    source_window_first_row_by_id: (debugSourceIds.length > 0 ? debugSourceIds : (health || []).slice(0, 3).map((h: any) => Number(h.source_id))).slice(0, 3).map((sid: number) => {
+                      const rows = sourceLogsById[Number(sid)] || []
+                      const first = rows[0] || null
+                      return {
+                        source_id: Number(sid),
+                        window_first_row: first ? {
+                          id: Number(first.id || 0) || null,
+                          run_at_utc: first.run_at_utc || null,
+                          status: first.status || null,
+                        } : null,
+                        window_rows_count: rows.length,
+                      }
+                    }),
+                    distribution_sample: (debugSourceIds.length > 0 ? debugSourceIds : (health || []).slice(0, 3).map((h: any) => Number(h.source_id))).slice(0, 3).map((sid: number) => {
+                      const h = (health || []).find((row: any) => Number(row.source_id) === Number(sid))
+                      const d = sourceDirectLatestById.find((row) => Number(row.source_id) === Number(sid))
+                      const w = (sourceLogsById[Number(sid)] || [])[0]
+                      const latestUsed = h?.last_run_at || null
+                      return {
+                        source_id: sid,
+                        latest_run_at_used_for_bucket: latestUsed,
+                        latest_run_at_direct: d?.run_at_utc || null,
+                        latest_run_at_window_first: w?.run_at_utc || null,
+                        bucket: bucketFromLatestRunAt(latestUsed),
+                      }
+                    }),
+                    parity_ok: parityOk,
+                    global_rows_last5: globalRowsLast5,
+                  }
+                : {}),
             }
           : undefined,
       }),
