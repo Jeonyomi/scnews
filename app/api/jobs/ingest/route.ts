@@ -811,9 +811,8 @@ const insertChannelPostSafe = async (client: any, row: any) => {
 }
 
 
-const escapeTelegramMarkdownV2 = (value: string) =>
-  String(value || '').replace(/([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '\\$1')
-
+const unescapeTelegramMarkdownV2 = (value: string) =>
+  String(value || '').replace(/\\([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '$1')
 const escapeTelegramUrl = (value: string) => encodeURI(String(value || '')).replace(/[()]/g, (m) => (m === '(' ? '%28' : '%29'))
 
 const formatKbnPost = (payload: {
@@ -836,7 +835,7 @@ const formatKbnPost = (payload: {
   const finalTitle = alreadyPrefixed ? clean : `${prefix} ${clean}`.trim()
 
   const link = normalizeFeedLink(String(payload.canonicalUrl || payload.fallbackUrl || '').trim())
-  const textRaw = `🏦[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
+  const textRaw = `🏦[${finalTitle}](${escapeTelegramUrl(link)})`
   const text = sanitizePostText(textRaw)
 
   return { text, finalTitle, link }
@@ -873,11 +872,13 @@ const sanitizeHeadline = (headline: string) => {
 }
 
 const sanitizePostText = (text: string) => {
-  const cleaned = String(text || '')
-    .replace(/\uFFFD/g, '')
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+  const cleaned = unescapeTelegramMarkdownV2(
+    String(text || '')
+      .replace(/\uFFFD/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
 
   if (/^🏦\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
 

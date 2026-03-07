@@ -9,12 +9,17 @@ if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing SUPABASE_SERVICE_ROLE_K
 
 const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+const unescapeTelegramMarkdownV2 = (text) =>
+  String(text || '').replace(/\\([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '$1')
+
 const sanitizeText = (text) => {
-  const cleaned = String(text || '')
-    .replace(/\uFFFD/g, '')
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+  const cleaned = unescapeTelegramMarkdownV2(
+    String(text || '')
+      .replace(/\uFFFD/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
 
   if (/^🏦\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
   return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
