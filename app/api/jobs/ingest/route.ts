@@ -57,6 +57,18 @@ const BREAKING_TIER_B_ALLOWLIST = [
   'Decrypt',
 ]
 
+const GENERAL_MEDIA_SOURCES = new Set([
+  'CoinDesk',
+  'The Block',
+  'Reuters',
+  'Blockworks',
+  'DL News',
+])
+
+const STABLECOIN_KEYWORDS = [
+  'stablecoin', 'usdt', 'usdc', 'dai', 'pyusd', 'fdusd', 'usde', 'frax', 'usds', 'usdp',
+]
+
 const TAG_RULES: Array<{ tag: string; keywords: string[] }> = [
   { tag: '#BTC', keywords: ['bitcoin', 'btc'] },
   { tag: '#ETH', keywords: ['ethereum', 'eth'] },
@@ -878,6 +890,20 @@ const hasBadKrNoticeTitle = (title: string) => {
   return /(\uC5C5\uBE44\uD2B8\s*-\s*\uC5C5\uBE44\uD2B8|\uBE57\uC378\s*-\s*\uBE57\uC378|\uCF54\uC778\uC6D0\s*-\s*\uCF54\uC778\uC6D0)/i.test(normalized)
 }
 
+const sanitizeHeadline = (headline: string) => {
+  return String(headline || '')
+    .replace(/\uFFFD/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/^[^\p{L}\p{N}\[]+/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const hasStablecoinKeyword = (text: string) => {
+  const lower = String(text || '').toLowerCase()
+  return STABLECOIN_KEYWORDS.some((k) => lower.includes(k))
+}
+
 const autoPostBreaking = async (client: any, payload: {
   articleId: number
   sourceName: string
@@ -889,7 +915,8 @@ const autoPostBreaking = async (client: any, payload: {
   whyItMatters?: string
   importanceLabel: string
 }) => {
-  const dedupeBase = hashContent(`${payload.canonicalUrl || payload.articleUrl || ''}|${payload.contentHash || ''}|${payload.headline}`.toLowerCase())
+  const sanitizedHeadline = sanitizeHeadline(payload.headline)
+  const dedupeBase = hashContent(`${payload.canonicalUrl || payload.articleUrl || ''}|${payload.contentHash || ''}|${sanitizedHeadline}`.toLowerCase())
 
   const skip = async (reason: string, postText: string | null) => {
     await insertChannelPostSafe(client, {
@@ -903,12 +930,16 @@ const autoPostBreaking = async (client: any, payload: {
     return { posted: false, reason }
   }
 
-  if (!String(payload.headline || '').trim() || !isValidHttpUrl(payload.canonicalUrl || payload.articleUrl)) {
+  if (!sanitizedHeadline || !isValidHttpUrl(payload.canonicalUrl || payload.articleUrl)) {
     return skip('skipped_invalid_payload', null)
   }
 
+  if (sanitizedHeadline.length < 12) {
+    return skip(CHANNEL_POST_REASONS.SKIPPED_BAD_HEADLINE_ENCODING, null)
+  }
+
   const post = formatKbnPost({
-    title: payload.headline,
+    title: sanitizedHeadline,
     summary: payload.summary,
     why: payload.whyItMatters,
     sourceName: payload.sourceName,
@@ -920,6 +951,13 @@ const autoPostBreaking = async (client: any, payload: {
   const isKrNoticeSource = KR_EXCHANGE_NOTICE_SOURCES.includes(String(payload.sourceName || ''))
   if (isKrNoticeSource && hasBadKrNoticeTitle(post.finalTitle)) {
     return skip(CHANNEL_POST_REASONS.SKIPPED_BAD_NOTICE_TITLE, post.text)
+  }
+
+  if (GENERAL_MEDIA_SOURCES.has(String(payload.sourceName || ''))) {
+    const stableText = `${post.finalTitle} ${payload.summary || ''}`
+    if (!hasStablecoinKeyword(stableText)) {
+      return skip(CHANNEL_POST_REASONS.SKIPPED_NON_STABLECOIN_KEYWORD_MISSING, post.text)
+    }
   }
 
   const { data: dup } = await client

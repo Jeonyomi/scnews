@@ -4,6 +4,8 @@ export const CHANNEL_POST_REASONS = {
   SKIPPED_INVALID_PAYLOAD: 'skipped_invalid_payload',
   SKIPPED_SOURCE_DISABLED_FOR_KBN: 'skipped_source_disabled_for_kbn',
   SKIPPED_BAD_NOTICE_TITLE: 'skipped_bad_notice_title',
+  SKIPPED_BAD_HEADLINE_ENCODING: 'skipped_bad_headline_encoding',
+  SKIPPED_NON_STABLECOIN_KEYWORD_MISSING: 'skipped_non_stablecoin_keyword_missing',
   FAILED_SEND: 'failed_send',
 
   // legacy reasons kept for backward-compatible analytics
@@ -29,6 +31,8 @@ export const normalizeChannelPostReason = (reason: string | null | undefined) =>
   if (r === CHANNEL_POST_REASONS.SKIPPED_INVALID_PAYLOAD) return 'skipped_invalid_payload'
   if (r === CHANNEL_POST_REASONS.SKIPPED_SOURCE_DISABLED_FOR_KBN) return 'skipped_source_disabled_for_kbn'
   if (r === CHANNEL_POST_REASONS.SKIPPED_BAD_NOTICE_TITLE) return 'skipped_bad_notice_title'
+  if (r === CHANNEL_POST_REASONS.SKIPPED_BAD_HEADLINE_ENCODING) return 'skipped_bad_headline_encoding'
+  if (r === CHANNEL_POST_REASONS.SKIPPED_NON_STABLECOIN_KEYWORD_MISSING) return 'skipped_non_stablecoin_keyword_missing'
   if (r === CHANNEL_POST_REASONS.FAILED_SEND || r.startsWith(CHANNEL_POST_REASONS.TELEGRAM_ERROR_PREFIX) || r.startsWith('failed_send:')) return 'failed_send'
 
   // legacy mapping
