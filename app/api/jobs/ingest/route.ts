@@ -831,13 +831,13 @@ const formatKbnPost = (payload: {
     String(payload.sourceName || ''),
   )
   const importance = String(payload.importanceLabel || '').toUpperCase()
-  const hasPrefix = clean.startsWith('[?�보]')
-  const finalTitle = importance === 'HIGH'
-    ? (hasPrefix ? clean : `[?�보] ${clean}`)
-    : clean
+  const prefix = importance === 'HIGH' ? '[BREAKING]' : '[UPDATE]'
+  const alreadyPrefixed = /^\[(BREAKING|UPDATE)\]\s*/i.test(clean)
+  const finalTitle = alreadyPrefixed ? clean : `${prefix} ${clean}`.trim()
 
   const link = normalizeFeedLink(String(payload.canonicalUrl || payload.fallbackUrl || '').trim())
-  const text = `?��[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
+  const textRaw = `[${escapeTelegramMarkdownV2(finalTitle)}](${escapeTelegramUrl(link)})`
+  const text = sanitizePostText(textRaw)
 
   return { text, finalTitle, link }
 }
@@ -872,6 +872,17 @@ const sanitizeHeadline = (headline: string) => {
     .trim()
 }
 
+const sanitizePostText = (text: string) => {
+  const cleaned = String(text || '')
+    .replace(/\uFFFD/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  // Remove leading junk before an ASCII prefix like [BREAKING]/[UPDATE].
+  return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
+}
+
 const hasStablecoinKeyword = (text: string) => {
   const lower = String(text || '').toLowerCase()
   return STABLECOIN_KEYWORDS.some((k) => lower.includes(k))
@@ -892,10 +903,12 @@ const autoPostBreaking = async (client: any, payload: {
   const dedupeBase = hashContent(`${payload.canonicalUrl || payload.articleUrl || ''}|${payload.contentHash || ''}|${sanitizedHeadline}`.toLowerCase())
 
   const skip = async (reason: string, postText: string | null) => {
+    const skippedHeadline = sanitizeHeadline(payload.headline)
+    const skippedPostText = postText ? sanitizePostText(postText) : null
     await insertChannelPostSafe(client, {
       status: 'skipped', lane: 'breaking', article_id: payload.articleId,
-      source_name: payload.sourceName, headline: payload.headline, headline_ko: payload.headline,
-      article_url: payload.canonicalUrl || payload.articleUrl, tags: [], post_text: postText,
+      source_name: payload.sourceName, headline: skippedHeadline, headline_ko: skippedHeadline,
+      article_url: payload.canonicalUrl || payload.articleUrl, tags: [], post_text: skippedPostText,
       target_channel: TELEGRAM_BREAKING_CHANNEL, target_admin: '@master_billybot',
       dedupe_key: `breaking:${dedupeBase}:${Date.now()}:${reason.slice(0,24)}`,
       reason, approved_by: 'auto',
@@ -945,10 +958,13 @@ const autoPostBreaking = async (client: any, payload: {
 
   if (dup?.id) return skip(CHANNEL_POST_REASONS.SKIPPED_DUPLICATE, post.text)
 
+  const safeHeadline = sanitizeHeadline(post.finalTitle)
+  const safePostText = sanitizePostText(post.text)
+
   await insertChannelPostSafe(client, {
     status: 'pending', lane: 'breaking', article_id: payload.articleId,
-    source_name: payload.sourceName, headline: post.finalTitle, headline_ko: post.finalTitle,
-    article_url: post.link, tags: [], post_text: post.text,
+    source_name: payload.sourceName, headline: safeHeadline, headline_ko: safeHeadline,
+    article_url: post.link, tags: [], post_text: safePostText,
     target_channel: TELEGRAM_BREAKING_CHANNEL, target_admin: '@master_billybot',
     dedupe_key: `breaking:${dedupeBase}:${Date.now()}`,
     approved_by: 'auto', reason: CHANNEL_POST_REASONS.QUEUED_OPENCLAW,
