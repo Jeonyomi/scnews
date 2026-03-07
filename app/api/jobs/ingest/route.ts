@@ -30,7 +30,6 @@ const CRYPTO_RELEVANCE_KEYWORDS = [
 ]
 
 const AUTO_POST_DEDUPE_HOURS = Number.parseInt(process.env.AUTO_POST_DEDUPE_HOURS || '12', 10) || 12
-const TELEGRAM_BOT_TOKEN = process.env.TG_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ''
 const TELEGRAM_BREAKING_CHANNEL = process.env.TG_BREAKING_CHANNEL || '@stablecoin_news'
 const AUTO_POST_MODE = String(process.env.AUTO_POST_MODE || 'all_post').toLowerCase()
 
@@ -811,32 +810,6 @@ const insertChannelPostSafe = async (client: any, row: any) => {
   throw error
 }
 
-const sendTelegramMessage = async (text: string) => {
-
-  if (!TELEGRAM_BOT_TOKEN) throw new Error('missing_telegram_bot_token')
-
-  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_BREAKING_CHANNEL,
-      text,
-      parse_mode: 'MarkdownV2',
-      disable_web_page_preview: true,
-    }),
-  })
-
-  const payload = await response.json().catch(() => ({} as any))
-  if (!response.ok || !payload?.ok) {
-    throw new Error(`telegram_send_failed: ${payload?.description || response.statusText}`)
-  }
-
-  return {
-    messageId: Number(payload.result?.message_id || 0),
-    chatId: String(payload.result?.chat?.id || TELEGRAM_BREAKING_CHANNEL),
-  }
-}
-
 
 const escapeTelegramMarkdownV2 = (value: string) =>
   String(value || '').replace(/([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '\\$1')
@@ -972,30 +945,15 @@ const autoPostBreaking = async (client: any, payload: {
 
   if (dup?.id) return skip(CHANNEL_POST_REASONS.SKIPPED_DUPLICATE, post.text)
 
-  try {
-    const sent = await sendTelegramMessage(post.text)
-    await insertChannelPostSafe(client, {
-      status: 'posted', lane: 'breaking', article_id: payload.articleId,
-      source_name: payload.sourceName, headline: post.finalTitle, headline_ko: post.finalTitle,
-      article_url: post.link, tags: [], post_text: post.text,
-      target_channel: TELEGRAM_BREAKING_CHANNEL, target_admin: '@master_billybot',
-      dedupe_key: `breaking:${dedupeBase}:${Date.now()}`,
-      posted_at: new Date().toISOString(), approved_by: 'auto',
-      telegram_message_id: sent.messageId, telegram_chat_id: sent.chatId, reason: CHANNEL_POST_REASONS.POSTED_AUTO,
-    })
-    return { posted: true, reason: CHANNEL_POST_REASONS.POSTED_AUTO }
-  } catch (sendErr: any) {
-    const failReason = `failed_send:${String(sendErr?.message || sendErr)}`.slice(0, 180)
-    await insertChannelPostSafe(client, {
-      status: 'failed', lane: 'breaking', article_id: payload.articleId,
-      source_name: payload.sourceName, headline: post.finalTitle, headline_ko: post.finalTitle,
-      article_url: post.link, tags: [], post_text: post.text,
-      target_channel: TELEGRAM_BREAKING_CHANNEL, target_admin: '@master_billybot',
-      dedupe_key: `breaking:${dedupeBase}:${Date.now()}:failed`,
-      approved_by: 'auto', reason: failReason,
-    })
-    return { posted: false, reason: CHANNEL_POST_REASONS.FAILED_SEND }
-  }
+  await insertChannelPostSafe(client, {
+    status: 'pending', lane: 'breaking', article_id: payload.articleId,
+    source_name: payload.sourceName, headline: post.finalTitle, headline_ko: post.finalTitle,
+    article_url: post.link, tags: [], post_text: post.text,
+    target_channel: TELEGRAM_BREAKING_CHANNEL, target_admin: '@master_billybot',
+    dedupe_key: `breaking:${dedupeBase}:${Date.now()}`,
+    approved_by: 'auto', reason: CHANNEL_POST_REASONS.QUEUED_OPENCLAW,
+  })
+  return { posted: false, reason: CHANNEL_POST_REASONS.QUEUED_OPENCLAW }
 }
 
 const insertSourceRunLog = async (client: any, runLog: any) => {
