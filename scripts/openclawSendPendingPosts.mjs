@@ -16,7 +16,7 @@ const sanitizeText = (text) => {
     .replace(/\s+/g, ' ')
     .trim()
 
-  if (/^💥\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
+  if (/^🏦\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
   return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
 }
 
