@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           telegram_message_id: sent.messageId,
           telegram_chat_id: sent.chatId,
           reason: CHANNEL_POST_REASONS.POSTED_AUTO,
-        }, 'sending')
+        }, 'pending')
 
         if (postRes.error) throw Object.assign(new Error('posted_update_failed'), { cause: formatError(postRes.error), stage: 'posted_update', rowId: Number(row.id) })
         posted += 1

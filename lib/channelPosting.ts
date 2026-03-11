@@ -55,31 +55,12 @@ export const sendTelegramMessage = async (text: string, chatId = TELEGRAM_BREAKI
 }
 
 export const claimPendingChannelPost = async (client: any, rowId: number) => {
-  const baseUpdate = {
-    status: 'sending',
-    updated_at: new Date().toISOString(),
-  }
-
-  let query = client
+  const { data, error } = await client
     .from('sc_channel_posts')
-    .update({ ...baseUpdate, reason: CHANNEL_POST_REASONS.SENDING_WORKER })
+    .select('id,status')
     .eq('id', rowId)
     .eq('status', 'pending')
-    .select('id,status,reason')
     .maybeSingle()
-
-  let { data, error } = await query
-  if (error && String(error.message || '').includes('reason')) {
-    const fallback = await client
-      .from('sc_channel_posts')
-      .update(baseUpdate)
-      .eq('id', rowId)
-      .eq('status', 'pending')
-      .select('id,status')
-      .maybeSingle()
-    data = fallback.data
-    error = fallback.error
-  }
 
   if (error) throw error
   return data || null
