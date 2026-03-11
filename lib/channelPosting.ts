@@ -55,17 +55,31 @@ export const sendTelegramMessage = async (text: string, chatId = TELEGRAM_BREAKI
 }
 
 export const claimPendingChannelPost = async (client: any, rowId: number) => {
-  const { data, error } = await client
+  const baseUpdate = {
+    status: 'sending',
+    updated_at: new Date().toISOString(),
+  }
+
+  let query = client
     .from('sc_channel_posts')
-    .update({
-      status: 'sending',
-      updated_at: new Date().toISOString(),
-      reason: CHANNEL_POST_REASONS.SENDING_WORKER,
-    })
+    .update({ ...baseUpdate, reason: CHANNEL_POST_REASONS.SENDING_WORKER })
     .eq('id', rowId)
     .eq('status', 'pending')
     .select('id,status,reason')
     .maybeSingle()
+
+  let { data, error } = await query
+  if (error && String(error.message || '').includes('reason')) {
+    const fallback = await client
+      .from('sc_channel_posts')
+      .update(baseUpdate)
+      .eq('id', rowId)
+      .eq('status', 'pending')
+      .select('id,status')
+      .maybeSingle()
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) throw error
   return data || null
@@ -97,16 +111,24 @@ export const recoverStaleSendingRows = async (client: any) => {
       .maybeSingle()
 
     if (alreadyPosted?.id) {
-      await client
+      let dupRes = await client
         .from('sc_channel_posts')
         .update({ status: 'skipped', updated_at: new Date().toISOString(), reason: CHANNEL_POST_REASONS.SKIPPED_DUPLICATE })
         .eq('id', Number(row.id))
         .eq('status', 'sending')
+      if (dupRes.error && String(dupRes.error.message || '').includes('reason')) {
+        dupRes = await client
+          .from('sc_channel_posts')
+          .update({ status: 'skipped', updated_at: new Date().toISOString() })
+          .eq('id', Number(row.id))
+          .eq('status', 'sending')
+      }
+      if (dupRes.error) throw dupRes.error
       skippedDuplicate += 1
       continue
     }
 
-    await client
+    let recoverRes = await client
       .from('sc_channel_posts')
       .update({
         status: 'pending',
@@ -115,6 +137,17 @@ export const recoverStaleSendingRows = async (client: any) => {
       })
       .eq('id', Number(row.id))
       .eq('status', 'sending')
+    if (recoverRes.error && String(recoverRes.error.message || '').includes('reason')) {
+      recoverRes = await client
+        .from('sc_channel_posts')
+        .update({
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', Number(row.id))
+        .eq('status', 'sending')
+    }
+    if (recoverRes.error) throw recoverRes.error
     recovered += 1
   }
 
