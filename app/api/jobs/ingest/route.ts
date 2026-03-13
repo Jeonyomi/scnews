@@ -4,6 +4,7 @@ import { createSupabaseServerClient, getSupabaseServerConfig } from '@/lib/supab
 import { err } from '@/lib/dashboardApi'
 import { isBreakingLane } from '@/lib/breakingClassifier'
 import { CHANNEL_POST_REASONS } from '@/lib/channelPostReasons'
+import { insertChannelPostSafe, sanitizePostText, TELEGRAM_BREAKING_CHANNEL } from '@/lib/channelPosting'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,13 +25,12 @@ const INGEST_SOURCE_ALLOWLIST_IDS = [
 const CRYPTO_RELEVANCE_KEYWORDS = [
   'bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'xrp', 'doge', 'bnb',
   'crypto', 'cryptocurrency', 'token', 'blockchain', 'onchain', 'wallet',
-  'stablecoin', 'usdt', 'usdc', 'depeg', 'defi', 'cex', 'exchange', 'binance',
+  'stablecoin', '스테이블코인', 'usdt', 'usdc', 'usd1', 'usde', 'depeg', 'defi', 'cex', 'exchange', 'binance',
   'coinbase', 'etf', 'sec', 'cftc', 'fomc', 'rate cut', 'listing', 'liquidation',
   'hack', 'exploit', 'bridge', 'staking', 'airdrop', 'mainnet', 'l2',
 ]
 
 const AUTO_POST_DEDUPE_HOURS = Number.parseInt(process.env.AUTO_POST_DEDUPE_HOURS || '12', 10) || 12
-const TELEGRAM_BREAKING_CHANNEL = process.env.TG_BREAKING_CHANNEL || '@stablecoin_news'
 const AUTO_POST_MODE = String(process.env.AUTO_POST_MODE || 'all_post').toLowerCase()
 
 
@@ -65,7 +65,7 @@ const GENERAL_MEDIA_SOURCES = new Set([
 ])
 
 const STABLECOIN_KEYWORDS = [
-  'stablecoin', 'usdt', 'usdc', 'dai', 'pyusd', 'fdusd', 'usde', 'frax', 'usds', 'usdp',
+  'stablecoin', '스테이블코인', 'usdt', 'usdc', 'usd1', 'usde', 'dai', 'pyusd', 'fdusd', 'frax', 'usds', 'usdp',
 ]
 
 const TAG_RULES: Array<{ tag: string; keywords: string[] }> = [
@@ -76,7 +76,7 @@ const TAG_RULES: Array<{ tag: string; keywords: string[] }> = [
   { tag: '#REGULATION', keywords: ['sec', 'cftc', 'regulation', 'lawsuit', 'compliance', 'enforcement'] },
   { tag: '#EXCHANGE', keywords: ['binance', 'coinbase', 'exchange', 'listing', 'delisting'] },
   { tag: '#HACK', keywords: ['hack', 'exploit', 'breach'] },
-  { tag: '#STABLECOIN', keywords: ['stablecoin', 'usdt', 'usdc', 'depeg'] },
+  { tag: '#STABLECOIN', keywords: ['stablecoin', '스테이블코인', 'usdt', 'usdc', 'usd1', 'usde', 'depeg'] },
   { tag: '#ETF', keywords: ['etf'] },
   { tag: '#ONCHAIN', keywords: ['onchain', 'wallet', 'validator', 'bridge', 'staking', 'gas fee', 'mempool'] },
 ]
@@ -572,6 +572,7 @@ const fetchWithRetry = async (url: string, tries = FETCH_TRIES, timeoutMs = FETC
 const deriveTopic = (title: string, summary: string) => {
   const text = `${title} ${summary}`.toLowerCase()
   if (text.includes('regulation') || text.includes('policy') || text.includes('regulatory')) return 'regulation'
+  if (/(stablecoin|스테이블코인|usdt|usdc|usd1|usde)/.test(text)) return 'issuer'
   if (
     text.includes('issuer') ||
     text.includes('issuer reserves') ||
@@ -668,7 +669,7 @@ const issueMatchScore = (args: {
   const titleOverlap = jaccardRatio(titleTokens, candidateTokens)
   const summaryOverlap = jaccardRatio(summaryTokens, candidateTokens)
 
-  const topicSignal = /(defi|stablecoin|peg|chain|exchange|issuer|regulat|payment|aml|fraud|macro|fed)/.test(
+  const topicSignal = /(defi|stablecoin|스테이블코인|usdt|usdc|usd1|usde|peg|chain|exchange|issuer|regulat|payment|aml|fraud|macro|fed)/.test(
     candidateTopic.toLowerCase(),
   )
   const topicSignalMatch = sameTopic || (topicSignal && topic === candidateTopic)
@@ -752,7 +753,7 @@ const isCryptoRelevant = (title: string, summary: string) => {
     if (text.includes(keyword)) hit += 1
   }
 
-  const strongSignal = /(stablecoin|depeg|crypto|bitcoin|ethereum|etf|exploit|hack|binance|coinbase|defi)/.test(text)
+  const strongSignal = /(stablecoin|스테이블코인|usdt|usdc|usd1|usde|depeg|crypto|bitcoin|ethereum|etf|exploit|hack|binance|coinbase|defi)/.test(text)
   return strongSignal || hit >= 2
 }
 
@@ -762,11 +763,11 @@ ${summary}`.toLowerCase()
   const tokens: string[] = []
 
   if (/(regulation|regulatory|policy|compliance|governance|directive|legal)/.test(text)) tokens.push('regulation')
-  if (/(issuer|reserves?|mint|reserve|company|treasury|stablecoin)/.test(text)) tokens.push('issuer')
+  if (/(issuer|reserves?|mint|reserve|company|treasury|stablecoin|스테이블코인|usdt|usdc|usd1|usde)/.test(text)) tokens.push('issuer')
   if (/(payment|wallet|transfer|bank|clearing|onchain|remittance)/.test(text)) tokens.push('payments')
   if (/(macro|inflation|fed|fomc|rate|monetary|central bank)/.test(text)) tokens.push('macro')
   if (/(aml|fraud|crime|enforcement|investigation|compliance|hack|security|investigation)/.test(text)) tokens.push('aml')
-  if (/(defi|liquidity|peg|depeg|redeem|burn|mint|stablecoin|reserves)/.test(text)) tokens.push('defi')
+  if (/(defi|liquidity|peg|depeg|redeem|burn|mint|stablecoin|스테이블코인|usdt|usdc|usd1|usde|reserves)/.test(text)) tokens.push('defi')
 
   return Array.from(new Set(tokens))
 }
@@ -795,24 +796,6 @@ const regionFromSource = (value: string | null) => {
 
 
 
-const insertChannelPostSafe = async (client: any, row: any) => {
-  const { error } = await client.from('sc_channel_posts').insert({ ...row })
-  if (!error) return
-
-  if (String(error.message || '').includes('reason')) {
-    const fallback = { ...row }
-    delete fallback.reason
-    const { error: fallbackErr } = await client.from('sc_channel_posts').insert(fallback)
-    if (!fallbackErr) return
-    throw fallbackErr
-  }
-
-  throw error
-}
-
-
-const unescapeTelegramMarkdownV2 = (value: string) =>
-  String(value || '').replace(/\\([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '$1')
 const escapeTelegramUrl = (value: string) => encodeURI(String(value || '')).replace(/[()]/g, (m) => (m === '(' ? '%28' : '%29'))
 
 const formatKbnPost = (payload: {
@@ -869,21 +852,6 @@ const sanitizeHeadline = (headline: string) => {
     .replace(/^[^\p{L}\p{N}\[]+/u, '')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-const sanitizePostText = (text: string) => {
-  const cleaned = unescapeTelegramMarkdownV2(
-    String(text || '')
-      .replace(/\uFFFD/g, '')
-      .replace(/[\u0000-\u001F\u007F]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim(),
-  )
-
-  if (/^🏦\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
-
-  // Remove leading junk before the headline link prefix.
-  return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
 }
 
 const hasStablecoinKeyword = (text: string) => {
