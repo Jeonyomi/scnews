@@ -40,7 +40,6 @@ export const sendTelegramMessage = async (text: string, chatId = TELEGRAM_BREAKI
     body: JSON.stringify({
       chat_id: chatId,
       text: sanitizePostText(text),
-      parse_mode: 'MarkdownV2',
       disable_web_page_preview: true,
     }),
   })

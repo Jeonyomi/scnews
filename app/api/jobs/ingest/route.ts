@@ -891,6 +891,8 @@ const autoPostBreaking = async (client: any, payload: {
   importanceLabel: string
 }) => {
   const directStablecoin = detectDirectStablecoinHit(payload.headline, `${payload.summary || ''} ${payload.whyItMatters || ''}`)
+  const derivedTopic = deriveTopic(payload.headline, `${payload.summary || ''} ${payload.whyItMatters || ''}`)
+  const topicalSignals = topicKeywords(payload.headline, `${payload.summary || ''} ${payload.whyItMatters || ''}`)
   const sanitizedHeadline = sanitizeHeadline(payload.headline)
   const dedupeBase = hashContent(`${payload.canonicalUrl || payload.articleUrl || ''}|${payload.contentHash || ''}|${sanitizedHeadline}`.toLowerCase())
 
@@ -936,8 +938,12 @@ const autoPostBreaking = async (client: any, payload: {
   }
 
   if (GENERAL_MEDIA_SOURCES.has(String(payload.sourceName || ''))) {
-    const stableText = `${post.finalTitle} ${payload.summary || ''}`
-    if (!hasStablecoinKeyword(stableText) && !directStablecoin.hit) {
+    const stableText = `${post.finalTitle} ${payload.summary || ''} ${payload.whyItMatters || ''}`
+    const strongStablecoinContext = directStablecoin.hit || hasStablecoinKeyword(stableText)
+    const topicBackstop = ['issuer', 'payments', 'regulation', 'defi'].includes(String(derivedTopic || ''))
+      && topicalSignals.some((t) => ['issuer', 'payments', 'defi', 'regulation'].includes(String(t)))
+      && ['HIGH', 'MED'].includes(effectiveImportance)
+    if (!strongStablecoinContext && !topicBackstop) {
       return skip(CHANNEL_POST_REASONS.SKIPPED_NON_STABLECOIN_KEYWORD_MISSING, post.text)
     }
   }
