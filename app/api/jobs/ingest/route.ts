@@ -68,6 +68,8 @@ const STABLECOIN_KEYWORDS = [
   'stablecoin', '스테이블코인', 'usdt', 'usdc', 'usd1', 'usde', 'dai', 'pyusd', 'fdusd', 'frax', 'usds', 'usdp',
 ]
 
+const DIRECT_STABLECOIN_HIT_KEYWORDS = ['stablecoin', '스테이블코인', 'usdt', 'usdc', 'usd1', 'usde']
+
 const TAG_RULES: Array<{ tag: string; keywords: string[] }> = [
   { tag: '#BTC', keywords: ['bitcoin', 'btc'] },
   { tag: '#ETH', keywords: ['ethereum', 'eth'] },
@@ -772,6 +774,15 @@ ${summary}`.toLowerCase()
   return Array.from(new Set(tokens))
 }
 
+const detectDirectStablecoinHit = (title: string, summary: string) => {
+  const text = `${title}\n${summary}`.toLowerCase()
+  const hits = DIRECT_STABLECOIN_HIT_KEYWORDS.filter((keyword) => text.includes(keyword))
+  return {
+    hit: hits.length > 0,
+    hits,
+  }
+}
+
 const computeScores = (args: {
   sourceTier: string | null
   topic: string
@@ -785,8 +796,17 @@ const computeScores = (args: {
   const topicScore = keywordSignals[topic as keyof typeof keywordSignals] || keywordSignals.unknown
   const keywordBoost = Math.min(20, topicKeywords(title, summary).length * 6)
   const entityBoost = Math.min(24, entities.length * 4)
-  const score = clampScore(sourceScore + topicScore + keywordBoost + entityBoost)
-  return { score, importance_label: labelFromScore(score) }
+  const directStablecoin = detectDirectStablecoinHit(title, summary)
+  const stablecoinBoost = directStablecoin.hit ? 18 + Math.min(8, directStablecoin.hits.length * 3) : 0
+  const rawScore = sourceScore + topicScore + keywordBoost + entityBoost + stablecoinBoost
+  const score = clampScore(rawScore)
+  const importanceLabel = directStablecoin.hit ? (score >= 60 ? 'HIGH' : 'MED') : labelFromScore(score)
+  return {
+    score,
+    importance_label: importanceLabel,
+    direct_stablecoin_hit: directStablecoin.hit,
+    direct_stablecoin_hits: directStablecoin.hits,
+  }
 }
 
 const regionFromSource = (value: string | null) => {
@@ -870,6 +890,7 @@ const autoPostBreaking = async (client: any, payload: {
   whyItMatters?: string
   importanceLabel: string
 }) => {
+  const directStablecoin = detectDirectStablecoinHit(payload.headline, `${payload.summary || ''} ${payload.whyItMatters || ''}`)
   const sanitizedHeadline = sanitizeHeadline(payload.headline)
   const dedupeBase = hashContent(`${payload.canonicalUrl || payload.articleUrl || ''}|${payload.contentHash || ''}|${sanitizedHeadline}`.toLowerCase())
 
@@ -895,6 +916,10 @@ const autoPostBreaking = async (client: any, payload: {
     return skip(CHANNEL_POST_REASONS.SKIPPED_BAD_HEADLINE_ENCODING, null)
   }
 
+  const effectiveImportance = directStablecoin.hit && String(payload.importanceLabel || '').toUpperCase() === 'LOW'
+    ? 'MED'
+    : String(payload.importanceLabel || '').toUpperCase()
+
   const post = formatKbnPost({
     title: sanitizedHeadline,
     summary: payload.summary,
@@ -902,7 +927,7 @@ const autoPostBreaking = async (client: any, payload: {
     sourceName: payload.sourceName,
     canonicalUrl: payload.canonicalUrl,
     fallbackUrl: payload.articleUrl,
-    importanceLabel: payload.importanceLabel,
+    importanceLabel: effectiveImportance,
   })
 
   const isKrNoticeSource = KR_EXCHANGE_NOTICE_SOURCES.includes(String(payload.sourceName || ''))
@@ -912,7 +937,7 @@ const autoPostBreaking = async (client: any, payload: {
 
   if (GENERAL_MEDIA_SOURCES.has(String(payload.sourceName || ''))) {
     const stableText = `${post.finalTitle} ${payload.summary || ''}`
-    if (!hasStablecoinKeyword(stableText)) {
+    if (!hasStablecoinKeyword(stableText) && !directStablecoin.hit) {
       return skip(CHANNEL_POST_REASONS.SKIPPED_NON_STABLECOIN_KEYWORD_MISSING, post.text)
     }
   }
@@ -1349,7 +1374,12 @@ ${effectiveSummary}`.slice(0, 4000)
           const contentHash = buildLookupHash(canonical_url, effectiveTitle, effectiveSummary)
           const topic = deriveTopic(effectiveTitle, effectiveSummary)
           const entities = extractEntities(`${effectiveTitle} ${effectiveSummary}`)
-          const { score: articleScore, importance_label: articleLabel } = computeScores({
+          const {
+            score: articleScore,
+            importance_label: articleLabel,
+            direct_stablecoin_hit: articleStablecoinHit,
+            direct_stablecoin_hits: articleStablecoinHits,
+          } = computeScores({
             sourceTier: source.tier,
             topic,
             entities,
@@ -1400,6 +1430,17 @@ ${effectiveSummary}`.slice(0, 4000)
           }
           insertedArticles += 1
           runLog.items_saved += 1
+          if (articleStablecoinHit) {
+            ;(runLog as any).direct_stablecoin_hits = Number((runLog as any).direct_stablecoin_hits || 0) + 1
+            console.log('direct_stablecoin_hit', {
+              source: source.name,
+              article_id: inserted.id,
+              title: effectiveTitle,
+              hits: articleStablecoinHits,
+              importance: articleLabel,
+              score: articleScore,
+            })
+          }
 
           try {
             const ap = await autoPostBreaking(client, {
