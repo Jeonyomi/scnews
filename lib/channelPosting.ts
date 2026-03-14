@@ -17,19 +17,20 @@ export const insertChannelPostSafe = async (client: any, row: any) => {
   throw error
 }
 
-const unescapeTelegramMarkdownV2 = (value: string) =>
-  String(value || '').replace(/\\([_\*\[\]\(\)~`>#+\-=|{}.!])/g, '$1')
+const escapeTelegramHtml = (value: string) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 
 export const sanitizePostText = (text: string) => {
-  const cleaned = unescapeTelegramMarkdownV2(
-    String(text || '')
-      .replace(/\uFFFD/g, '')
-      .replace(/[\u0000-\u001F\u007F]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim(),
-  )
-  if (/^🏦\[/u.test(cleaned) || /^\[/u.test(cleaned)) return cleaned
-  return cleaned.replace(/^[^\[]+(?=\[)/u, '').trim()
+  return String(text || '')
+    .replace(/\uFFFD/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export const sendTelegramMessage = async (text: string, chatId = TELEGRAM_BREAKING_CHANNEL) => {
@@ -40,6 +41,7 @@ export const sendTelegramMessage = async (text: string, chatId = TELEGRAM_BREAKI
     body: JSON.stringify({
       chat_id: chatId,
       text: sanitizePostText(text),
+      parse_mode: 'HTML',
       disable_web_page_preview: true,
     }),
   })

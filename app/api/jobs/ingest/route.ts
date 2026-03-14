@@ -816,7 +816,12 @@ const regionFromSource = (value: string | null) => {
 
 
 
-const escapeTelegramUrl = (value: string) => encodeURI(String(value || '')).replace(/[()]/g, (m) => (m === '(' ? '%28' : '%29'))
+const escapeTelegramHtml = (value: string) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 
 const formatKbnPost = (payload: {
   title: string
@@ -838,7 +843,9 @@ const formatKbnPost = (payload: {
   const finalTitle = alreadyPrefixed ? clean : `${prefix} ${clean}`.trim()
 
   const link = normalizeFeedLink(String(payload.canonicalUrl || payload.fallbackUrl || '').trim())
-  const textRaw = `🏦[${finalTitle}](${escapeTelegramUrl(link)})`
+  const safeTitle = escapeTelegramHtml(`🏦 ${finalTitle}`)
+  const safeLink = escapeTelegramHtml(link)
+  const textRaw = `<a href="${safeLink}">${safeTitle}</a>`
   const text = sanitizePostText(textRaw)
 
   return { text, finalTitle, link }
